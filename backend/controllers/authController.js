@@ -351,6 +351,140 @@ async function changePassword(req, res, next) {
   }
 }
 
+// 8. OAuth Social Login (Google, Microsoft, GitHub)
+async function oauthLogin(req, res, next) {
+  try {
+    const { provider, email, name, oauth_id, avatar_url, role } = req.body;
+
+    if (!provider || !email) {
+      return res.status(400).json({ success: false, message: 'OAuth provider and verified email are required.' });
+    }
+
+    const validProviders = ['google', 'microsoft', 'github'];
+    if (!validProviders.includes(provider.toLowerCase())) {
+      return res.status(400).json({ success: false, message: `Unsupported provider: ${provider}` });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanProvider = provider.toLowerCase();
+    const providerDisplay = cleanProvider === 'google' ? 'Google' : cleanProvider === 'microsoft' ? 'Microsoft' : 'GitHub';
+
+    // 1. Check if user already exists with this email
+    const existingUsers = await query(
+      'SELECT id, name, email, role, phone, status, oauth_provider, oauth_id, avatar_url FROM users WHERE email = ?',
+      [cleanEmail]
+    );
+
+    let user;
+
+    if (existingUsers.length > 0) {
+      user = existingUsers[0];
+
+      if (user.status !== 'active') {
+        return res.status(403).json({
+          success: false,
+          message: 'Account is deactivated. Please contact Brightloop Software support.'
+        });
+      }
+
+      // Link / Update OAuth provider and avatar
+      await query(
+        'UPDATE users SET oauth_provider = COALESCE(?, oauth_provider), oauth_id = COALESCE(?, oauth_id), avatar_url = COALESCE(?, avatar_url) WHERE id = ?',
+        [cleanProvider, oauth_id || null, avatar_url || null, user.id]
+      );
+    } else {
+      // 2. Provision new user
+      const assignedRole = (role === 'admin' || role === 'staff') ? role : 'customer';
+      const userName = name && name.trim() ? name.trim() : cleanEmail.split('@')[0];
+
+      const result = await transaction(async (conn) => {
+        const [userRes] = await conn.query(
+          `INSERT INTO users 
+           (name, email, password_hash, role, oauth_provider, oauth_id, avatar_url, status) 
+           VALUES (?, ?, NULL, ?, ?, ?, ?, 'active')`,
+          [userName, cleanEmail, assignedRole, cleanProvider, oauth_id || `oauth_${Date.now()}`, avatar_url || null]
+        );
+        const newUserId = userRes.insertId;
+
+        let newCustomerId = null;
+        let customerCode = null;
+
+        if (assignedRole === 'customer') {
+          customerCode = `CUST-BL-${String(newUserId).padStart(4, '0')}`;
+          const [custRes] = await conn.query(
+            `INSERT INTO customers 
+             (user_id, customer_code, company_name, contact_name, email, currency, status) 
+             VALUES (?, ?, ?, ?, ?, 'INR', 'active')`,
+            [newUserId, customerCode, `${userName}'s Workspace`, userName, cleanEmail]
+          );
+          newCustomerId = custRes.insertId;
+        }
+
+        return {
+          id: newUserId,
+          name: userName,
+          email: cleanEmail,
+          role: assignedRole,
+          customer_id: newCustomerId,
+          customer_code: customerCode,
+          company_name: `${userName}'s Workspace`,
+          oauth_provider: cleanProvider,
+          avatar_url: avatar_url || null
+        };
+      });
+
+      user = result;
+    }
+
+    // Role-specific detail fetch for existing user
+    let customerId = user.customer_id || null;
+    let staffId = null;
+    let companyName = user.company_name || null;
+
+    if (user.role === 'customer' && !customerId) {
+      const custRows = await query('SELECT id, customer_code, company_name FROM customers WHERE user_id = ?', [user.id]);
+      if (custRows.length > 0) {
+        customerId = custRows[0].id;
+        companyName = custRows[0].company_name;
+      }
+    } else if (user.role === 'staff') {
+      const staffRows = await query('SELECT id, employee_code, department FROM staff WHERE user_id = ?', [user.id]);
+      if (staffRows.length > 0) {
+        staffId = staffRows[0].id;
+      }
+    }
+
+    const token = createToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name
+    });
+
+    const safeUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone || null,
+      customer_id: customerId,
+      company_name: companyName,
+      staff_id: staffId,
+      oauth_provider: cleanProvider,
+      avatar_url: avatar_url || user.avatar_url || null
+    };
+
+    return res.json({
+      success: true,
+      message: `Successfully authenticated with ${providerDisplay}! Welcome, ${user.name}.`,
+      token,
+      user: safeUser
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -358,5 +492,6 @@ module.exports = {
   forgotPassword,
   resetPassword,
   updateProfile,
-  changePassword
+  changePassword,
+  oauthLogin
 };

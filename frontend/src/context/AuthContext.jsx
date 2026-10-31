@@ -71,6 +71,19 @@ export function AuthProvider({ children }) {
     throw new Error(res.data.message || 'Registration failed.');
   }, []);
 
+  const oauthLogin = useCallback(async (payload) => {
+    const res = await api.post('/auth/oauth-login', payload);
+    if (res.data.success) {
+      const { token: newToken, user: newUser } = res.data;
+      localStorage.setItem('brightloop_token', newToken);
+      localStorage.setItem('brightloop_user', JSON.stringify(newUser));
+      setToken(newToken);
+      setUser(newUser);
+      return newUser;
+    }
+    throw new Error(res.data.message || 'OAuth authentication failed.');
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('brightloop_token');
     localStorage.removeItem('brightloop_user');
@@ -97,6 +110,7 @@ export function AuthProvider({ children }) {
         loading,
         login,
         register,
+        oauthLogin,
         logout,
         updateUser
       }}
