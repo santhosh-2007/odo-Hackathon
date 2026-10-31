@@ -249,19 +249,22 @@ async function exportReportCsv(req, res, next) {
     }, next);
 
     if (!reportResult || !reportResult.data || reportResult.data.length === 0) {
-      return res.status(404).send('No data available to export.');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="Brightloop_${type}_${Date.now()}.csv"`);
+      return res.send('\uFEFF"Notice"\r\n"No records found for the selected report filters."\r\n');
     }
 
     const rows = reportResult.data;
     const headers = Object.keys(rows[0]);
-    let csv = toCsvRow(headers) + '\r\n';
+    // Prepend UTF-8 BOM so Excel on Windows decodes correctly
+    let csv = '\uFEFF' + toCsvRow(headers) + '\r\n';
 
     rows.forEach(r => {
       const values = headers.map(h => r[h]);
       csv += toCsvRow(values) + '\r\n';
     });
 
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="Brightloop_${type}_${Date.now()}.csv"`);
     return res.send(csv);
   } catch (error) {

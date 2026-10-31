@@ -11,7 +11,7 @@ import {
   Users, 
   Clock 
 } from 'lucide-react';
-import api from '../../services/api';
+import api, { downloadReportCsv } from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import Badge from '../../components/Badge';
 
@@ -27,10 +27,11 @@ const REPORT_TABS = [
 ];
 
 export default function ReportsPage() {
-  const { error } = useToast();
+  const { success, error } = useToast();
   const [activeTab, setActiveTab] = useState('total-revenue');
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   // Filters
   const [startDate, setStartDate] = useState('');
@@ -65,13 +66,21 @@ export default function ReportsPage() {
     fetchReport();
   };
 
-  const handleExportCsv = () => {
-    const params = new URLSearchParams();
-    if (startDate) params.append('startDate', startDate);
-    if (endDate) params.append('endDate', endDate);
-    if (search) params.append('search', search);
+  const handleExportCsv = async () => {
+    try {
+      setExporting(true);
+      const params = {};
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      if (search) params.search = search;
 
-    window.open(`/api/reports/${activeTab}/csv?${params.toString()}`, '_blank');
+      await downloadReportCsv(activeTab, params);
+      success(`Report "${activeTab}" exported successfully as CSV!`);
+    } catch (err) {
+      error(err.response?.data?.message || 'Failed to export CSV report. Please try again.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const summary = reportData?.summary || {};
@@ -99,10 +108,12 @@ export default function ReportsPage() {
 
           <button
             onClick={handleExportCsv}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+            title="Download Report as CSV Spreadsheet"
           >
             <Download className="w-4 h-4" />
-            <span>Export CSV</span>
+            <span>{exporting ? 'Exporting...' : 'Export CSV'}</span>
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Inbox, Download } from 'lucide-react';
+import { exportDataToCsv } from '../services/api';
 
 export default function DataTable({
   columns,
@@ -11,11 +12,18 @@ export default function DataTable({
   filters = [],
   actions,
   pageSize = 10,
-  emptyMessage = 'No records found.'
+  emptyMessage = 'No records found.',
+  exportable = true
 }) {
   const [search, setSearch] = useState('');
   const [filterValues, setFilterValues] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
+
+  const handleExportTableCsv = () => {
+    if (!filteredData || filteredData.length === 0) return;
+    const cleanName = searchPlaceholder ? searchPlaceholder.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/^search_/, '') : 'records';
+    exportDataToCsv(filteredData, `Brightloop_${cleanName}_${Date.now()}.csv`, columns);
+  };
 
   const handleFilterChange = (key, val) => {
     setFilterValues((prev) => ({ ...prev, [key]: val }));
@@ -99,7 +107,20 @@ export default function DataTable({
         </div>
 
         {/* Action Buttons */}
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        <div className="flex items-center gap-2">
+          {actions}
+          {exportable && filteredData.length > 0 && (
+            <button
+              type="button"
+              onClick={handleExportTableCsv}
+              className="flex items-center gap-1.5 px-3 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 rounded-xl text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+              title="Export records as CSV spreadsheet"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden sm:inline">Export CSV</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table Content */}
