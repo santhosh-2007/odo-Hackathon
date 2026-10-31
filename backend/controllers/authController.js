@@ -91,7 +91,7 @@ async function register(req, res, next) {
 // 2. Login
 async function login(req, res, next) {
   try {
-    const { email, password } = req.body;
+    const { email, password, role: expected_role } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required.' });
@@ -115,6 +115,29 @@ async function login(req, res, next) {
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ success: false, message: 'Invalid email or password credentials.' });
+    }
+
+    // Role Enforcement / Strict Restriction
+    if (expected_role) {
+      const cleanExpected = expected_role.toLowerCase().trim();
+      if (cleanExpected === 'admin' && user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid login: This account does not have Administrator privileges.'
+        });
+      }
+      if (cleanExpected === 'staff' && user.role !== 'staff' && user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid login: This account does not have Staff privileges.'
+        });
+      }
+      if (cleanExpected === 'customer' && user.role !== 'customer') {
+        return res.status(403).json({
+          success: false,
+          message: `Invalid login: This account is registered as ${user.role}. Please switch to ${user.role} login.`
+        });
+      }
     }
 
     // Role-specific detail fetch
@@ -387,6 +410,29 @@ async function oauthLogin(req, res, next) {
         });
       }
 
+      // Enforce role restriction if requested
+      if (role) {
+        const cleanReqRole = role.toLowerCase().trim();
+        if (cleanReqRole === 'admin' && user.role !== 'admin') {
+          return res.status(403).json({
+            success: false,
+            message: 'Invalid login: This account does not have Administrator privileges.'
+          });
+        }
+        if (cleanReqRole === 'staff' && user.role !== 'staff' && user.role !== 'admin') {
+          return res.status(403).json({
+            success: false,
+            message: 'Invalid login: This account does not have Staff privileges.'
+          });
+        }
+        if (cleanReqRole === 'customer' && user.role !== 'customer') {
+          return res.status(403).json({
+            success: false,
+            message: `Invalid login: This account is registered as ${user.role}. Please switch to ${user.role} login.`
+          });
+        }
+      }
+
       // Link / Update OAuth provider and avatar
       await query(
         'UPDATE users SET oauth_provider = COALESCE(?, oauth_provider), oauth_id = COALESCE(?, oauth_id), avatar_url = COALESCE(?, avatar_url) WHERE id = ?',
@@ -488,7 +534,7 @@ async function oauthLogin(req, res, next) {
 // 9. Google Direct Authentication (Handles official Google ID Tokens / Credentials or direct Gmail verification)
 async function googleDirectAuth(req, res, next) {
   try {
-    const { credential, email, name, picture } = req.body;
+    const { credential, email, name, picture, role } = req.body;
     let googleUser = null;
 
     if (credential) {
@@ -560,6 +606,29 @@ async function googleDirectAuth(req, res, next) {
           success: false,
           message: 'Account is deactivated. Please contact Brightloop Software support.'
         });
+      }
+
+      // Enforce role restriction if requested
+      if (role) {
+        const cleanReqRole = role.toLowerCase().trim();
+        if (cleanReqRole === 'admin' && user.role !== 'admin') {
+          return res.status(403).json({
+            success: false,
+            message: 'Invalid login: This account does not have Administrator privileges.'
+          });
+        }
+        if (cleanReqRole === 'staff' && user.role !== 'staff' && user.role !== 'admin') {
+          return res.status(403).json({
+            success: false,
+            message: 'Invalid login: This account does not have Staff privileges.'
+          });
+        }
+        if (cleanReqRole === 'customer' && user.role !== 'customer') {
+          return res.status(403).json({
+            success: false,
+            message: `Invalid login: This account is registered as ${user.role}. Please switch to ${user.role} login.`
+          });
+        }
       }
 
       // Update OAuth provider and avatar

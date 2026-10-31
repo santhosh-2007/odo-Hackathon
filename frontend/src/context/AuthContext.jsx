@@ -45,8 +45,8 @@ export function AuthProvider({ children }) {
     verifyAuth();
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
+  const login = useCallback(async (email, password, role) => {
+    const res = await api.post('/auth/login', { email, password, role });
     if (res.data.success) {
       const { token: newToken, user: newUser } = res.data;
       localStorage.setItem('brightloop_token', newToken);
