@@ -1,0 +1,26 @@
+{
+  "name": "brightloop-subscription-management-system",
+  "version": "1.0.0",
+  "description": "Commercial-grade Subscription Management System for Brightloop Software",
+  "scripts": {
+    "start:backend": "cd backend && npm start",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "init:db": "cd backend && npm run init-db",
+    "seed:db": "cd backend && npm run seed-db",
+    "test:system": "node backend/scripts/verifySystem.js"
+  },
+  "keywords": [
+    "subscription-management",
+    "saas",
+    "billing",
+    "brightloop",
+    "mysql",
+    "react",
+    "vite",
+    "tailwind"
+  ],
+  "author": "Brightloop Software",
+  "license": "ISC"
+}
