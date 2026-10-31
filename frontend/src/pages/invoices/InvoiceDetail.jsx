@@ -10,7 +10,7 @@ import {
   Clock, 
   AlertTriangle 
 } from 'lucide-react';
-import api from '../../services/api';
+import api, { downloadInvoicePdf } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import Modal from '../../components/Modal';
@@ -24,6 +24,7 @@ export default function InvoiceDetail() {
 
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   // Pay Modal
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -83,6 +84,18 @@ export default function InvoiceDetail() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    try {
+      setDownloading(true);
+      await downloadInvoicePdf(invoice.id, invoice.invoice_number);
+      success('Invoice PDF downloaded successfully!');
+    } catch (err) {
+      error('Failed to download invoice PDF.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const handleSendEmail = async () => {
     try {
       const res = await api.post(`/invoices/${id}/send-email`);
@@ -121,15 +134,15 @@ export default function InvoiceDetail() {
         </button>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          <a
-            href={`/api/invoices/${invoice.id}/pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 transition-colors"
+          <button
+            onClick={handleDownloadPdf}
+            disabled={downloading}
+            className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+            title="Download PDF Document"
           >
             <Download className="w-4 h-4 text-slate-500" />
-            <span>Download PDF</span>
-          </a>
+            <span>{downloading ? 'Downloading...' : 'Download PDF'}</span>
+          </button>
 
           <button
             onClick={() => window.print()}

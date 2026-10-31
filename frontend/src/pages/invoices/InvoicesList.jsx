@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Receipt, Eye, Download, CreditCard, Play, Plus, XCircle, Send } from 'lucide-react';
-import api from '../../services/api';
+import api, { downloadInvoicePdf } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import DataTable from '../../components/DataTable';
@@ -15,6 +15,15 @@ export default function InvoicesList() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [runningBilling, setRunningBilling] = useState(false);
+
+  const handleDownload = async (row) => {
+    try {
+      await downloadInvoicePdf(row.id, row.invoice_number);
+      success(`Downloaded ${row.invoice_number}.pdf`);
+    } catch (err) {
+      error('Failed to download invoice PDF.');
+    }
+  };
 
   // Record Payment Modal State
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -186,15 +195,13 @@ export default function InvoicesList() {
             <Eye className="w-4 h-4" />
           </Link>
 
-          <a
-            href={`/api/invoices/${row.id}/pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+          <button
+            onClick={() => handleDownload(row)}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
             title="Download PDF"
           >
             <Download className="w-4 h-4" />
-          </a>
+          </button>
 
           {(role === 'admin' || role === 'staff') && (
             <>

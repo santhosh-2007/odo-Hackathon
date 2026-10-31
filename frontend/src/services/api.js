@@ -38,4 +38,31 @@ api.interceptors.response.use(
   }
 );
 
+// Helper to reliably download Invoice PDF across all browsers
+export async function downloadInvoicePdf(invoiceId, invoiceNumber) {
+  const token = localStorage.getItem('brightloop_token');
+  try {
+    const response = await api.get(`/invoices/${invoiceId}/pdf`, {
+      responseType: 'blob'
+    });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${invoiceNumber || `INV-${invoiceId}`}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    return true;
+  } catch (error) {
+    console.error('Blob PDF download failed, using direct URL fallback:', error);
+    if (token) {
+      window.open(`/api/invoices/${invoiceId}/pdf?token=${encodeURIComponent(token)}`, '_blank');
+      return true;
+    }
+    throw error;
+  }
+}
+
 export default api;

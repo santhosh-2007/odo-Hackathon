@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw, Receipt, Clock, CheckCircle2, Download, ArrowRight, Layers, FileText } from 'lucide-react';
-import api from '../../services/api';
+import api, { downloadInvoicePdf } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import StatCard from '../../components/StatCard';
@@ -11,7 +11,16 @@ export default function CustomerPortal() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { error } = useToast();
+  const { success, error } = useToast();
+
+  const handleDownloadInvoice = async (inv) => {
+    try {
+      await downloadInvoicePdf(inv.id, inv.invoice_number);
+      success(`Downloaded ${inv.invoice_number}.pdf`);
+    } catch (err) {
+      error('Failed to download invoice PDF.');
+    }
+  };
 
   useEffect(() => {
     async function fetchPortalData() {
@@ -184,15 +193,13 @@ export default function CustomerPortal() {
                       <Badge status={inv.payment_status} size="xs" />
                     </div>
                   </div>
-                  <a
-                    href={`/api/invoices/${inv.id}/pdf`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="p-2 text-slate-400 hover:text-brand-blue hover:bg-slate-100 rounded-xl transition-colors"
+                  <button
+                    onClick={() => handleDownloadInvoice(inv)}
+                    className="p-2 text-slate-400 hover:text-brand-blue hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                     title="Download Official Tax Invoice PDF"
                   >
                     <Download className="w-4 h-4" />
-                  </a>
+                  </button>
                 </div>
               </div>
             ))
