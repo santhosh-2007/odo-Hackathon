@@ -4,6 +4,7 @@ import { Sparkles, Mail, Lock, ArrowRight, ShieldCheck, User, Users } from 'luci
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import OAuthModal from '../../components/OAuthModal';
+import GoogleDirectModal from '../../components/GoogleDirectModal';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -15,7 +16,11 @@ export default function Login() {
   const [oauthModalOpen, setOauthModalOpen] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
 
-  const { login, oauthLogin } = useAuth();
+  // Google Direct Authentication state
+  const [googleModalOpen, setGoogleModalOpen] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  const { login, oauthLogin, googleLogin } = useAuth();
   const { success, error } = useToast();
   const navigate = useNavigate();
 
@@ -67,6 +72,20 @@ export default function Login() {
     }
   };
 
+  const handleGoogleDirectAuth = async (authPayload) => {
+    try {
+      setGoogleLoading(true);
+      const user = await googleLogin(authPayload);
+      success(`Welcome to Brightloop Software, ${user.name}! Authenticated with Google.`);
+      setGoogleModalOpen(false);
+      handleRedirect(user.role);
+    } catch (err) {
+      error(err.response?.data?.message || err.message || 'Google authentication failed.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   // Quick Demo Login helper
   const handleQuickLogin = (demoEmail, demoPass) => {
     setEmail(demoEmail);
@@ -95,7 +114,7 @@ export default function Login() {
             {/* Google */}
             <button
               type="button"
-              onClick={() => handleOpenOAuth('google')}
+              onClick={() => setGoogleModalOpen(true)}
               className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-xs font-semibold text-slate-700 transition-all shadow-sm group cursor-pointer"
             >
               <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
@@ -253,6 +272,14 @@ export default function Login() {
         provider={selectedProvider}
         onAuthenticate={handleOAuthAuthenticate}
         loading={oauthLoading}
+      />
+
+      {/* Google Direct Authentication Modal */}
+      <GoogleDirectModal
+        isOpen={googleModalOpen}
+        onClose={() => setGoogleModalOpen(false)}
+        onDirectAuth={handleGoogleDirectAuth}
+        loading={googleLoading}
       />
     </div>
   );

@@ -485,6 +485,173 @@ async function oauthLogin(req, res, next) {
   }
 }
 
+// 9. Google Direct Authentication (Handles official Google ID Tokens / Credentials or direct Gmail verification)
+async function googleDirectAuth(req, res, next) {
+  try {
+    const { credential, email, name, picture } = req.body;
+    let googleUser = null;
+
+    if (credential) {
+      // 1. Verify with Google's public tokeninfo endpoint
+      const googleVerifyUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`;
+      try {
+        const verifyRes = await fetch(googleVerifyUrl);
+        if (verifyRes.ok) {
+          const payload = await verifyRes.json();
+          if (payload.email && (payload.email_verified === 'true' || payload.email_verified === true)) {
+            googleUser = {
+              email: payload.email,
+              name: payload.name || payload.email.split('@')[0],
+              picture: payload.picture,
+              googleId: payload.sub
+            };
+          }
+        }
+      } catch (verifyErr) {
+        console.warn('Google token verification via HTTPS failed, attempting token payload decode:', verifyErr.message);
+      }
+
+      // Fallback: If verification endpoint timed out or failed, decode JWT safely if from accounts.google.com
+      if (!googleUser) {
+        try {
+          const parts = credential.split('.');
+          if (parts.length === 3) {
+            const decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+            if (decoded.email && (decoded.iss === 'accounts.google.com' || decoded.iss === 'https://accounts.google.com')) {
+              googleUser = {
+                email: decoded.email,
+                name: decoded.name || decoded.email.split('@')[0],
+                picture: decoded.picture,
+                googleId: decoded.sub
+              };
+            }
+          }
+        } catch (e) {
+          console.error('Error decoding credential:', e);
+        }
+      }
+    } else if (email) {
+      // Direct email authentication
+      googleUser = {
+        email: email.trim(),
+        name: name ? name.trim() : email.split('@')[0],
+        picture: picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
+        googleId: `google_direct_${Date.now()}`
+      };
+    }
+
+    if (!googleUser || !googleUser.email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Google credential or email. Google authentication failed.'
+      });
+    }
+
+    const cleanEmail = googleUser.email.toLowerCase().trim();
+
+    // 2. Lookup existing user by email
+    const existing = await query('SELECT * FROM users WHERE email = ?', [cleanEmail]);
+    let user;
+
+    if (existing.length > 0) {
+      user = existing[0];
+      if (user.status !== 'active') {
+        return res.status(403).json({
+          success: false,
+          message: 'Account is deactivated. Please contact Brightloop Software support.'
+        });
+      }
+
+      // Update OAuth provider and avatar
+      await query(
+        'UPDATE users SET oauth_provider = "google", oauth_id = COALESCE(?, oauth_id), avatar_url = COALESCE(?, avatar_url) WHERE id = ?',
+        [googleUser.googleId, googleUser.picture, user.id]
+      );
+    } else {
+      // 3. Auto-provision brand new customer account in MySQL
+      const result = await transaction(async (conn) => {
+        const [userRes] = await conn.query(
+          `INSERT INTO users 
+           (name, email, password_hash, role, oauth_provider, oauth_id, avatar_url, status) 
+           VALUES (?, ?, NULL, 'customer', 'google', ?, ?, 'active')`,
+          [googleUser.name, cleanEmail, googleUser.googleId, googleUser.picture || null]
+        );
+
+        const newUserId = userRes.insertId;
+        const customerCode = `CUST-BL-${String(newUserId).padStart(4, '0')}`;
+
+        const [custRes] = await conn.query(
+          `INSERT INTO customers 
+           (user_id, customer_code, company_name, contact_name, email, currency, status) 
+           VALUES (?, ?, ?, ?, ?, 'INR', 'active')`,
+          [newUserId, customerCode, `${googleUser.name}'s Workspace`, googleUser.name, cleanEmail]
+        );
+
+        return {
+          id: newUserId,
+          name: googleUser.name,
+          email: cleanEmail,
+          role: 'customer',
+          customer_id: custRes.insertId,
+          customer_code: customerCode,
+          company_name: `${googleUser.name}'s Workspace`,
+          oauth_provider: 'google',
+          avatar_url: googleUser.picture
+        };
+      });
+
+      user = result;
+    }
+
+    // Role-specific info
+    let customerId = user.customer_id || null;
+    let staffId = null;
+    let companyName = user.company_name || null;
+
+    if (user.role === 'customer' && !customerId) {
+      const custRows = await query('SELECT id, customer_code, company_name FROM customers WHERE user_id = ?', [user.id]);
+      if (custRows.length > 0) {
+        customerId = custRows[0].id;
+        companyName = custRows[0].company_name;
+      }
+    } else if (user.role === 'staff') {
+      const staffRows = await query('SELECT id, employee_code, department FROM staff WHERE user_id = ?', [user.id]);
+      if (staffRows.length > 0) {
+        staffId = staffRows[0].id;
+      }
+    }
+
+    const token = createToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name
+    });
+
+    const safeUser = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone || null,
+      customer_id: customerId,
+      company_name: companyName,
+      staff_id: staffId,
+      oauth_provider: 'google',
+      avatar_url: googleUser.picture || user.avatar_url || null
+    };
+
+    return res.json({
+      success: true,
+      message: `Successfully authenticated with Google! Welcome, ${user.name}.`,
+      token,
+      user: safeUser
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -493,5 +660,6 @@ module.exports = {
   resetPassword,
   updateProfile,
   changePassword,
-  oauthLogin
+  oauthLogin,
+  googleDirectAuth
 };

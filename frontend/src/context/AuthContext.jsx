@@ -84,6 +84,19 @@ export function AuthProvider({ children }) {
     throw new Error(res.data.message || 'OAuth authentication failed.');
   }, []);
 
+  const googleLogin = useCallback(async (payload) => {
+    const res = await api.post('/auth/google', payload);
+    if (res.data.success) {
+      const { token: newToken, user: newUser } = res.data;
+      localStorage.setItem('brightloop_token', newToken);
+      localStorage.setItem('brightloop_user', JSON.stringify(newUser));
+      setToken(newToken);
+      setUser(newUser);
+      return newUser;
+    }
+    throw new Error(res.data.message || 'Google authentication failed.');
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem('brightloop_token');
     localStorage.removeItem('brightloop_user');
@@ -111,6 +124,7 @@ export function AuthProvider({ children }) {
         login,
         register,
         oauthLogin,
+        googleLogin,
         logout,
         updateUser
       }}
